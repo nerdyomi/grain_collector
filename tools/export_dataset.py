@@ -62,7 +62,12 @@ CROP_COLLECTIONS = ["maize", "paddy"]
 ALL_CATEGORIES = [
     "whole", "broken", "dust", "fungus", "small",
     "black", "immature", "mixed", "empty", "discolored",
+    "consignment", "buyerPo",
 ]
+
+# Categories that hold free text instead of a weight (mirrors
+# CategoryFieldType.text in lib/core/models/crop_config.dart).
+TEXT_CATEGORIES = {"consignment", "buyerPo"}
 
 
 def download_photo(storage_path: str, dest_path: str) -> bool:
@@ -113,6 +118,7 @@ def main():
                 "sample_id": sample_id,
                 "crop_type": data.get("cropType", crop_type),
                 "moisture": data.get("moisture"),
+                "supplier": data.get("supplier"),
                 "notes": data.get("notes"),
                 "latitude": location.get("latitude"),
                 "longitude": location.get("longitude"),
@@ -123,13 +129,18 @@ def main():
                 "schema_version": data.get("schemaVersion"),
             }
             for category in ALL_CATEGORIES:
-                row[f"{category}_weight_gm"] = None
+                if category in TEXT_CATEGORIES:
+                    row[f"{category}_text"] = None
+                else:
+                    row[f"{category}_weight_gm"] = None
                 row[f"{category}_image_path"] = None
 
             categories = data.get("categories") or {}
             for category, cat_data in categories.items():
                 weight = cat_data.get("weightGm")
+                text_value = cat_data.get("textValue")
                 storage_path = cat_data.get("storagePath")
+                is_text = category in TEXT_CATEGORIES
 
                 local_path = None
                 if storage_path:
@@ -137,8 +148,9 @@ def main():
                     if download_photo(storage_path, dest):
                         local_path = os.path.relpath(dest, output_dir)
 
-                if category in row or f"{category}_weight_gm" in row:
-                    row[f"{category}_weight_gm"] = weight
+                value_column = f"{category}_text" if is_text else f"{category}_weight_gm"
+                if value_column in row:
+                    row[value_column] = text_value if is_text else weight
                     row[f"{category}_image_path"] = local_path
 
                 image_rows.append({
@@ -146,6 +158,7 @@ def main():
                     "crop_type": crop_type,
                     "category": category,
                     "weight_gm": weight,
+                    "text_value": text_value,
                     "storage_path": storage_path,
                     "local_image_path": local_path,
                 })

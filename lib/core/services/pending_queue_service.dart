@@ -9,18 +9,25 @@ import '../models/captured_location.dart';
 
 class PendingCategoryData {
   final double? weightGm;
+  final String? textValue;
   final String? localPhotoPath;
 
-  const PendingCategoryData({this.weightGm, this.localPhotoPath});
+  const PendingCategoryData({
+    this.weightGm,
+    this.textValue,
+    this.localPhotoPath,
+  });
 
   Map<String, dynamic> toJson() => {
     'weightGm': weightGm,
+    'textValue': textValue,
     'localPhotoPath': localPhotoPath,
   };
 
   factory PendingCategoryData.fromJson(Map<String, dynamic> json) =>
       PendingCategoryData(
         weightGm: (json['weightGm'] as num?)?.toDouble(),
+        textValue: json['textValue'] as String?,
         localPhotoPath: json['localPhotoPath'] as String?,
       );
 }
@@ -32,7 +39,8 @@ class PendingEntry {
   final String entryId;
   final String cropType;
   final Map<String, PendingCategoryData> categories;
-  final String? moisture;
+  final double? moisture;
+  final String? supplier;
   final String? notes;
   final CapturedLocation location;
   final DateTime createdAt;
@@ -44,6 +52,7 @@ class PendingEntry {
     required this.cropType,
     required this.categories,
     required this.moisture,
+    required this.supplier,
     required this.notes,
     required this.location,
     required this.createdAt,
@@ -56,6 +65,7 @@ class PendingEntry {
     cropType: cropType,
     categories: categories,
     moisture: moisture,
+    supplier: supplier,
     notes: notes,
     location: location,
     createdAt: createdAt,
@@ -68,6 +78,7 @@ class PendingEntry {
     'cropType': cropType,
     'categories': categories.map((k, v) => MapEntry(k, v.toJson())),
     'moisture': moisture,
+    'supplier': supplier,
     'notes': notes,
     'location': location.toJson(),
     'createdAt': createdAt.toIso8601String(),
@@ -81,7 +92,8 @@ class PendingEntry {
     categories: (json['categories'] as Map<String, dynamic>).map(
       (k, v) => MapEntry(k, PendingCategoryData.fromJson(v)),
     ),
-    moisture: json['moisture'] as String?,
+    moisture: (json['moisture'] as num?)?.toDouble(),
+    supplier: json['supplier'] as String?,
     notes: json['notes'] as String?,
     location: CapturedLocation.fromJson(json['location']),
     createdAt: DateTime.parse(json['createdAt'] as String),

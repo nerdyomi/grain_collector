@@ -31,6 +31,7 @@ class SyncService {
       for (final e in entry.categories.entries) {
         categories[e.key] = CategoryUploadData(
           weightGm: e.value.weightGm,
+          textValue: e.value.textValue,
           photoFile: e.value.localPhotoPath != null
               ? File(e.value.localPhotoPath!)
               : null,
@@ -42,6 +43,7 @@ class SyncService {
         entryId: entry.entryId,
         categories: categories,
         moisture: entry.moisture,
+        supplier: entry.supplier,
         notes: entry.notes,
         location: entry.location,
         createdAtDevice: entry.createdAt,

@@ -12,11 +12,12 @@ import 'supabase_storage_service.dart';
 /// or during upload.
 class CategoryUploadData {
   final double? weightGm;
+  final String? textValue;
   final File? photoFile;
 
-  const CategoryUploadData({this.weightGm, this.photoFile});
+  const CategoryUploadData({this.weightGm, this.textValue, this.photoFile});
 
-  bool get isEmpty => weightGm == null && photoFile == null;
+  bool get isEmpty => weightGm == null && textValue == null && photoFile == null;
 }
 
 /// Uploads one complete grain-quality entry.
@@ -32,31 +33,29 @@ class GrainUploadService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final SupabaseStorageService _storage = SupabaseStorageService();
 
-  Future<String> ensureSignedIn() async {
+  /// A signed-in worker is a precondition to reaching any screen that
+  /// submits data (see LoginScreen/ProfileSetupScreen in main.dart), so
+  /// this just reads the current session - no anonymous fallback.
+  String ensureSignedIn() {
     final current = _auth.currentUser;
-    if (current != null) {
-      debugPrint('[upload] already signed in as ${current.uid}');
-      return current.uid;
+    if (current == null) {
+      throw StateError('No worker is signed in.');
     }
-    debugPrint('[upload] signing in anonymously...');
-    final credential = await _auth
-        .signInAnonymously()
-        .timeout(const Duration(seconds: 20));
-    debugPrint('[upload] signed in as ${credential.user!.uid}');
-    return credential.user!.uid;
+    return current.uid;
   }
 
   Future<void> submitEntry({
     required CropConfig crop,
     required String entryId,
     required Map<String, CategoryUploadData> categories,
-    required String? moisture,
+    required double? moisture,
+    required String? supplier,
     required String? notes,
     required CapturedLocation location,
     required DateTime createdAtDevice,
   }) async {
     debugPrint('[upload] submitEntry start: $entryId');
-    final uid = await ensureSignedIn();
+    final uid = ensureSignedIn();
 
     final categoriesJson = <String, dynamic>{};
     for (final entry in categories.entries) {
@@ -78,6 +77,7 @@ class GrainUploadService {
 
       categoriesJson[key] = {
         if (data.weightGm != null) 'weightGm': data.weightGm,
+        if (data.textValue != null) 'textValue': data.textValue,
         if (storagePath != null) 'storagePath': storagePath,
       };
     }
@@ -86,16 +86,17 @@ class GrainUploadService {
       'entryId': entryId,
       'cropType': crop.cropType,
       'categories': categoriesJson,
-      'moisture': (moisture == null || moisture.trim().isEmpty)
+      'moisture': moisture,
+      'supplier': (supplier == null || supplier.trim().isEmpty)
           ? null
-          : moisture.trim(),
+          : supplier.trim(),
       'notes': (notes == null || notes.trim().isEmpty) ? null : notes.trim(),
       'location': location.toJson(),
       'createdAtDevice': createdAtDevice.toIso8601String(),
       'uploadedAtServer': FieldValue.serverTimestamp(),
       'authUid': uid,
       'storageProvider': 'supabase',
-      'schemaVersion': 1,
+      'schemaVersion': 3,
     };
 
     debugPrint('[upload] writing firestore doc $entryId ...');

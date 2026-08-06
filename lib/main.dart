@@ -3,13 +3,46 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'core/models/crop_config.dart';
+import 'core/services/auth_service.dart';
 import 'core/services/pending_queue_service.dart';
+import 'core/services/worker_profile_service.dart';
+import 'features/auth/login_screen.dart';
+import 'features/auth/profile_setup_screen.dart';
 import 'features/crop_entry/crop_entry_screen.dart';
 import 'features/pending/pending_submissions_screen.dart';
 import 'firebase_options.dart';
 
 void main() {
   runApp(const IFarmerApp());
+}
+
+/// After a worker is authenticated (either a restored session on app start,
+/// or a fresh login), decide whether they land on Home or need to fill in
+/// their profile first. Shared by SplashScreen and LoginScreen so there's
+/// one place that knows this rule.
+Future<void> navigateAfterAuth(BuildContext context) async {
+  final workerId = AuthService().currentWorkerId!;
+  final profileService = WorkerProfileService();
+
+  var profile = await profileService.loadCached(workerId);
+  if (profile == null) {
+    try {
+      profile = await profileService.fetchFromFirestore(workerId);
+      if (profile != null) {
+        await profileService.cacheLocally(profile);
+      }
+    } catch (e) {
+      debugPrint('Could not fetch worker profile: $e');
+    }
+  }
+
+  if (!context.mounted) return;
+  Navigator.of(context).pushReplacement(
+    MaterialPageRoute(
+      builder: (_) =>
+          profile != null ? const HomeScreen() : const ProfileSetupScreen(),
+    ),
+  );
 }
 
 class IFarmerApp extends StatelessWidget {
@@ -76,18 +109,20 @@ class _SplashScreenState extends State<SplashScreen> {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      if (FirebaseAuth.instance.currentUser == null) {
-        await FirebaseAuth.instance.signInAnonymously();
-      }
     } catch (e) {
       // Non-fatal: the app still works offline; sync will retry auth later.
       debugPrint('Firebase init failed: $e');
     }
 
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+
+    if (FirebaseAuth.instance.currentUser == null) {
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+    } else {
+      await navigateAfterAuth(context);
+    }
   }
 
   @override
@@ -133,6 +168,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _pendingQueue = PendingQueueService();
+  final _authService = AuthService();
   int _pendingCount = 0;
 
   @override
@@ -165,6 +201,34 @@ class _HomeScreenState extends State<HomeScreen> {
     _refreshPendingCount();
   }
 
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await _authService.signOut();
+    await WorkerProfileService().clearCache();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,6 +243,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             tooltip: 'Pending Submissions',
             onPressed: _openPending,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Log out',
+            onPressed: _logout,
           ),
         ],
       ),
@@ -196,13 +265,13 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 32),
             ElevatedButton.icon(
               icon: const Icon(Icons.grass),
-              label: const Text('Paddy'),
+              label: Text(CropCatalog.paddy.bilingualDisplayName),
               onPressed: () => _openCrop(CropCatalog.paddy),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               icon: const Icon(Icons.eco),
-              label: const Text('Maize'),
+              label: Text(CropCatalog.maize.bilingualDisplayName),
               onPressed: () => _openCrop(CropCatalog.maize),
             ),
           ],

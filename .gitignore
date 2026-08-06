@@ -50,6 +50,9 @@ android/local.properties
 # Firebase Admin private key - grants full project access, never commit
 tools/service_account.json
 
+# Real worker login credentials - never commit
+tools/workers.csv
+
 # Reproducible anytime via tools/export_dataset.py (source of truth is Firebase/Supabase)
 /dataset/
 
